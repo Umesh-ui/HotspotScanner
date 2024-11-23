@@ -1,115 +1,92 @@
-import React, {useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  TouchableOpacity,
   FlatList,
-  Button,
   StyleSheet,
-  PermissionsAndroid,
+  ActivityIndicator,
   Alert,
-  Platform,
 } from 'react-native';
-import {NetworkInfo} from 'react-native-network-info';
+import { NativeModules } from 'react-native';
+import { check, request, RESULTS, PERMISSIONS } from 'react-native-permissions';
 
-const App = () => {
-  const [deviceIp, setDeviceIp] = useState(null);
+const { HotspotModule } = NativeModules;
+
+const Home = () => {
   const [connectedDevices, setConnectedDevices] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // Request Permissions
+  const requestPermissions = async () => {
+    try {
+      const fineLocation = await request(PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION);
+      const coarseLocation = await request(PERMISSIONS.ANDROID.ACCESS_COARSE_LOCATION);
+      const wifiState = await request(PERMISSIONS.ANDROID.ACCESS_WIFI_STATE);
+
+      if (fineLocation === RESULTS.GRANTED && coarseLocation === RESULTS.GRANTED && wifiState === RESULTS.GRANTED) {
+        console.log('Permissions granted');
+      } else {
+        Alert.alert('Permissions Required', 'You need to grant all permissions to scan devices.');
+      }
+    } catch (error) {
+      console.log('Error getting permissions:', error);
+    }
+  };
+
   useEffect(() => {
-    fetchDeviceIp();
+    requestPermissions();
   }, []);
 
-  // Fetch the device's own IP address
-  const fetchDeviceIp = async () => {
-    try {
-      const ip = await NetworkInfo.getIPAddress();
-      setDeviceIp(ip);
-    } catch (error) {
-      console.error('Error fetching device IP:', error);
-    }
-  };
-
-  // Simulate fetching connected devices
+  // Fetch connected devices
   const fetchConnectedDevices = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-
-      // Simulate a delay for fetching data
-      setTimeout(() => {
-        // Mock connected devices data
-        const mockConnectedDevices = [
-          {ip: '192.168.43.2', name: 'Device 1'},
-          {ip: '192.168.43.3', name: 'Device 2'},
-          {ip: '192.168.43.4', name: 'Device 3'},
-        ];
-        setConnectedDevices(mockConnectedDevices);
-        setLoading(false);
-      }, 2000);
-    } catch (error) {
-      Alert.alert('Error', 'Unable to fetch connected devices.');
-      setLoading(false);
-    }
-  };
-
-  // Request permissions for network access (required on Android)
-  const requestPermissions = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Network Access Permission',
-            message: 'This app needs permission to access network details.',
-            buttonPositive: 'Allow',
-          },
-        );
-
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          fetchConnectedDevices();
-        } else {
-          Alert.alert(
-            'Permission Denied',
-            'Cannot fetch connected devices without permission.',
-          );
-        }
-      } catch (error) {
-        console.error('Permission error:', error);
+      const devices = await HotspotModule.getConnectedDevices();
+      if (Array.isArray(devices)) {
+        setConnectedDevices(devices);
+        console.log('Devices found:', devices);
+      } else {
+        console.log('No devices found', devices);
+        setConnectedDevices([]);
       }
-    } else {
-      // For iOS or platforms where permissions are not required
-      fetchConnectedDevices();
+    } catch (error) {
+      console.error('Error fetching devices:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Mobile Hotspot Device Scanner</Text>
-      <Text style={styles.info}>Device IP: {deviceIp || 'Fetching...'}</Text>
+      <Text style={styles.title}>Mobile Hotspot Scanner</Text>
+      <TouchableOpacity
+        style={styles.scanButton}
+        onPress={fetchConnectedDevices}>
+        <Text style={styles.scanButtonText}>
+          {loading ? 'Scanning...' : 'Scan for Devices'}
+        </Text>
+      </TouchableOpacity>
 
-      <Button
-        title={loading ? 'Scanning...' : 'Scan for Devices'}
-        onPress={requestPermissions}
-        disabled={loading}
-      />
-
-      <FlatList
-        data={connectedDevices}
-        keyExtractor={item => item.ip}
-        renderItem={({item}) => (
-          <View style={styles.deviceItem}>
-            <Text style={styles.deviceName}>{item.name}</Text>
-            <Text style={styles.deviceIp}>{item.ip}</Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          !loading && (
-            <Text style={styles.noDevices}>
-              No connected devices found. Start scanning!
-            </Text>
-          )
-        }
-      />
+      {loading ? (
+        <ActivityIndicator
+          size="large"
+          color="#007AFF"
+          style={styles.loadingIndicator}
+        />
+      ) : connectedDevices.length > 0 ? (
+        <FlatList
+          data={connectedDevices}
+          keyExtractor={(item, index) => index.toString()}
+          renderItem={({ item }) => (
+            <View style={styles.deviceContainer}>
+              <Text style={styles.deviceText}>Device IP: {item}</Text>
+            </View>
+          )}
+        />
+      ) : (
+        <Text style={styles.noDevicesText}>No Connected Devices Found</Text>
+      )}
     </View>
   );
 };
@@ -117,39 +94,53 @@ const App = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F5F5F5',
     padding: 20,
-    backgroundColor: '#f8f8f8',
   },
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 10,
     textAlign: 'center',
+    color: '#333333',
+    marginVertical: 20,
   },
-  info: {
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  deviceItem: {
-    padding: 15,
-    backgroundColor: '#e8e8e8',
+  scanButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 15,
+    paddingHorizontal: 25,
     borderRadius: 8,
-    marginBottom: 10,
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  deviceName: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  deviceIp: {
+  scanButtonText: {
     fontSize: 16,
-    color: '#555',
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  noDevices: {
+  loadingIndicator: {
+    marginVertical: 20,
+  },
+  deviceContainer: {
+    backgroundColor: '#FFFFFF',
+    padding: 15,
+    marginVertical: 8,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  deviceText: {
+    fontSize: 16,
+    color: '#333333',
+  },
+  noDevicesText: {
+    fontSize: 16,
+    color: '#888888',
     textAlign: 'center',
-    color: '#888',
     marginTop: 20,
   },
 });
 
-export default App;
+export default Home;
