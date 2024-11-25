@@ -49,4 +49,8 @@ Permissions Required
 
     ACCESS_FINE_LOCATION: Required to access location for scanning nearby devices.
     ACCESS_COARSE_LOCATION: Allows access to approximate location information for better device scanning.
-    ACCESS_WIFI_STATE: Required to check the status of the Wi-Fi and connected devices.
+    NEARBY_WIFI_DEVICES: Required to check the status of the Wi-Fi and connected devices.
+
+# Note
+
+    In newer versions of android the permissions are restricted kindly test the app in OS version below 31.
